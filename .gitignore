@@ -1,0 +1,54 @@
+# Database
+*.db
+*.sqlite
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Frontend build
+frontend/dist/
+
+# Docker volumes
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+._*
+
+# Backup archives
+*.tar.gz
+*_backup_*.db
+
+# Backup files
+*_*_*_*.vue
+*_*_*_*.yml
+Dashboard_*.vue
+docker-compose_*.yml
+
+# Temporary
+dist_new/
+dist.tar.gz
+temp/
+*.pyc
+__pycache__/
+
+# Root duplicates (real source is in frontend/)
+/src/
+/index.html
+/package.json
+/package-lock.json
+/vite.config.js

@@ -1,0 +1,18 @@
+services:
+  wealthhome:
+    build: .
+    container_name: wealthhome
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - wealthhome_data:/app/data
+    environment:
+      - DB_PATH=/app/data/wealthhome.db
+      - JWT_SECRET=Wh7-kM3pRx9vL2nQf8aBcD4eFg6HiJ1k
+      - CORS_ORIGINS=http://localhost:5173
+      - TUSHARE_TOKEN=your-tushare-token
+      - MARKET_REFRESH_INTERVAL=0
+
+volumes:
+  wealthhome_data:
