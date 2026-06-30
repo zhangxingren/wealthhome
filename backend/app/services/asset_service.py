@@ -49,7 +49,7 @@ def calc_user_summary(user_id: int, db=None) -> Dict:
 
 
 def calc_investment_summary(user_id: int) -> Dict:
-    """投资盈亏汇总"""
+    """投资盈亏汇总（股票 + 基金 + 债券 + 贵金属）"""
     with get_db() as db:
         stocks = db.execute(
             "SELECT shares, cost_price, current_price FROM asset_stock WHERE user_id=?",
@@ -62,6 +62,11 @@ def calc_investment_summary(user_id: int) -> Dict:
         bonds = db.execute(
             "SELECT quantity, cost_price, COALESCE(NULLIF(current_price,0), face_value) as cur_price "
             "FROM asset_bond WHERE user_id=?",
+            (user_id,)
+        ).fetchall()
+        metals = db.execute(
+            "SELECT weight_grams, buy_price_per_gram, current_price_per_gram "
+            "FROM asset_precious_metal WHERE user_id=?",
             (user_id,)
         ).fetchall()
 
@@ -77,14 +82,19 @@ def calc_investment_summary(user_id: int) -> Dict:
     bond_market = sum(r["quantity"] * (r["cur_price"] or 0) for r in bonds)
     bond_profit = bond_market - bond_cost
 
-    total_cost = stock_cost + fund_cost + bond_cost
-    total_market = stock_market + fund_market + bond_market
-    total_profit = stock_profit + fund_profit + bond_profit
+    metal_cost = sum(r["weight_grams"] * (r["buy_price_per_gram"] or 0) for r in metals)
+    metal_market = sum(r["weight_grams"] * (r["current_price_per_gram"] or 0) for r in metals)
+    metal_profit = metal_market - metal_cost
+
+    total_cost = stock_cost + fund_cost + bond_cost + metal_cost
+    total_market = stock_market + fund_market + bond_market + metal_market
+    total_profit = stock_profit + fund_profit + bond_profit + metal_profit
 
     return {
         "stock": round(stock_profit, 2),
         "fund": round(fund_profit, 2),
         "bond": round(bond_profit, 2),
+        "precious_metal": round(metal_profit, 2),
         "total": round(total_profit, 2),
         "total_cost": round(total_cost, 2),
         "total_market_value": round(total_market, 2),
