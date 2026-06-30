@@ -36,14 +36,14 @@ export function useAmountFormat() {
     switch (formats[currentIdx.value]) {
       case 'wan': {
         const num = (v / 10000).toFixed(v >= 10000 ? 1 : 2)
-        if (html) return '¥' + num + '<span style="margin-left:3px;font-weight:800;">万</span>'
-        return '¥' + num + '万'
+        if (html) return '¥' + '<span style="margin-left:1px;">' + num + '</span>' + '<span style="margin-left:3px;font-weight:900;">万</span>'
+        return '¥\u2009' + num + '\uFEFF万'
       }
       case 'k': {
         const num = (v / 1000).toFixed(v >= 1000 ? 1 : 2)
-        return '¥' + num + 'k'
+        return '¥\u2009' + num + 'k'
       }
-      default: return '¥' + v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      default: return '¥\u2009' + v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     }
   }
 
@@ -66,4 +66,14 @@ export function formatAmount(value) {
 }
 export function formatHtml(value) {
   return useAmountFormat().format(value, true)
+}
+
+// 返回不带 ¥ 前缀的纯数字（用于正负号场景如 ¥+xxx / ¥-xxx）
+export function formatAmountNumber(value) {
+  const v = Math.abs(Number(value) || 0)
+  switch (formats[currentIdx.value]) {
+    case 'wan': return (v / 10000).toFixed(v >= 10000 ? 1 : 2) + '万'
+    case 'k': return (v / 1000).toFixed(v >= 1000 ? 1 : 2) + 'k'
+    default: return v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
 }

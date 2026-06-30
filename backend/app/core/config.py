@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 168  # 7 天
 
-    # 数据库路径（容器内 /app/data/wealthhome.db；本地开发用当前目录）
-    db_path: str = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "wealthhome.db"))
+    # 数据库路径（容器内 /app/data/wealthhome.db；本地开发用 backend/ 目录）
+    db_path: str = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "wealthhome.db"))
 
     # Tushare token（免费用户，仅支持日线行情）
     tushare_token: str = os.getenv("TUSHARE_TOKEN", "")

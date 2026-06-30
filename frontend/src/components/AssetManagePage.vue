@@ -16,15 +16,15 @@
     <div class="pm-summary-cards" v-if="summary.total_cost > 0">
       <div class="pm-summary-item">
         <div class="pm-summary-label">总成本</div>
-        <div class="pm-summary-value">¥{{ formatAmount(summary.total_cost) }}</div>
+        <div class="pm-summary-value">{{ formatAmount(summary.total_cost) }}</div>
       </div>
       <div class="pm-summary-item">
         <div class="pm-summary-label">总市值</div>
-        <div class="pm-summary-value">¥{{ formatAmount(summary.total_market_value) }}</div>
+        <div class="pm-summary-value">{{ formatAmount(summary.total_market_value) }}</div>
       </div>
       <div class="pm-summary-item" :class="{ profit: summary.total_profit >= 0, loss: summary.total_profit < 0 }">
         <div class="pm-summary-label">总盈亏</div>
-        <div class="pm-summary-value">{{ summary.total_profit >= 0 ? '+' : '' }}¥{{ formatAmount(summary.total_profit) }}</div>
+        <div class="pm-summary-value">{{ (summary.total_profit || 0) >= 0 ? formatAmount(summary.total_profit) : '¥-' + formatAmountNumber(Math.abs(summary.total_profit)) }}</div>
       </div>
       <div class="pm-summary-item" :class="{ profit: summary.total_profit >= 0, loss: summary.total_profit < 0 }">
         <div class="pm-summary-label">盈亏率</div>
@@ -34,17 +34,21 @@
 
     <div class="page-card-body">
       <el-table :data="list" v-loading="loading" empty-text="暂无{{ cfg.apiLabel }}持仓">
-        <el-table-column v-for="col in cfg.columns" :key="col.prop" :prop="col.prop" :label="col.label" :width="col.width" :min-width="col.minWidth">
+        <el-table-column v-for="col in cfg.columns" :key="col.prop" :prop="col.prop" :label="col.label" :width="col.width" :min-width="col.minWidth" :show-overflow-tooltip="col.showOverflowTooltip">
           <template v-if="col.slot" #default="{row}">
             <span v-if="col.slot === 'market_value'" :style="col.style ? col.style(row) : {}">¥{{ (row[cfg.quantityField] * row[cfg.currentField]).toLocaleString() }}</span>
+            <span v-else-if="col.slot === 'invested_cost'">¥{{ (row[cfg.quantityField] * row[cfg.costField]).toLocaleString() }}</span>
             <span v-else-if="col.slot === 'pnl'" :style="{color: (computePnl(row) >= 0 ? '#10b981' : '#ef4444')}">
               {{ computePnlPct(row).toFixed(1) }}%
+            </span>
+            <span v-else-if="col.slot === 'pnl_amount'" :style="{color: (computePnl(row) >= 0 ? '#10b981' : '#ef4444')}" class="font-mono">
+              {{ computePnl(row) >= 0 ? formatAmount(computePnl(row)) : '¥-' + formatAmountNumber(Math.abs(computePnl(row))) }}
             </span>
             <el-tag v-else-if="col.slot === 'market'" size="small">{{ row.market.toUpperCase() }}</el-tag>
             <el-tag v-else-if="col.slot === 'fund_type'" size="small">{{ row.fund_type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" min-width="150" fixed="right">
           <template #default="{row}">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="del(row.id)">删除</el-button>
@@ -100,9 +104,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TrendChart from './TrendChart.vue'
+import { useTimeRangeStore } from '../stores/timeRange'
+import { formatAmount, formatAmountNumber } from '../composables/useAmountFormat'
 
 const props = defineProps({
   config: { type: Object, required: true }
@@ -115,14 +121,11 @@ const list = ref([]); const loading = ref(false); const saving = ref(false); con
 const apiKeyDialog = ref(false); const apiKey = ref('')
 const savingKey = ref(false); const refreshingPrices = ref(false)
 const trendData = ref([])
+const timeStore = useTimeRangeStore()
 
 const form = reactive({ ...cfg.defaultForm })
 
 // ---------- computed ----------
-function formatAmount(v) {
-  return Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
 function computePnl(row) {
   return (row[cfg.currentField] - row[cfg.costField]) * (row[cfg.quantityField] || 0)
 }
@@ -155,7 +158,7 @@ async function load() {
 
 async function loadTrend() {
   try {
-    const { data } = await cfg.api.getTrend(cfg.trendType, 30)
+    const { data } = await cfg.api.getTrend(cfg.trendType, 30, timeStore.start, timeStore.end)
     trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 }))
   } catch (e) { console.error(`[${cfg.assetType}] 趋势加载失败:`, e); trendData.value = [] }
 }
@@ -231,43 +234,8 @@ async function refreshPrices() {
 }
 
 onMounted(() => { initApiKey(); load(); loadTrend() })
+
+// 时间范围变化时重新加载趋势
+watch(() => [timeStore.start, timeStore.end], () => { loadTrend() })
 </script>
 
-<style scoped>
-.pm-summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: var(--md-surface-container-low);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--md-outline-variant);
-}
-
-.pm-summary-item {
-  text-align: center;
-  padding: 8px;
-}
-
-.pm-summary-label {
-  font-size: 12px;
-  color: var(--c-text-tertiary);
-  margin-bottom: 4px;
-}
-
-.pm-summary-value {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--c-text);
-}
-
-.pm-summary-item.profit .pm-summary-value {
-  color: #10b981;
-}
-
-.pm-summary-item.loss .pm-summary-value {
-  color: #ef4444;
-}
-</style>

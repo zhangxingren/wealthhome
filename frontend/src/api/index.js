@@ -103,15 +103,30 @@ export const getPreciousMetalSummary = () => api.get('/precious-metals/summary')
 // Net Worth
 export const takeSnapshot = (snapDate) => api.post('/networth/snapshot', null, { params: { snap_date: snapDate } })
 export const listSnapshots = (params) => api.get('/networth/snapshots', { params })
-export const getTrend = (limit = 30) => api.get('/networth/trend', { params: { limit } })
-export const getAssetTrend = (category, limit = 30) => api.get('/networth/trend/category', { params: { field: category, limit } })
+export const getTrend = (limit = 30, start = null, end = null) => {
+  const params = { limit }
+  if (start) params.start = start
+  if (end) params.end = end
+  return api.get('/networth/trend', { params })
+}
+export const getAssetTrend = (category, limit = 30, start = null, end = null) => {
+  const params = { field: category, limit }
+  if (start) params.start = start
+  if (end) params.end = end
+  return api.get('/networth/trend/category', { params })
+}
 export const deleteSnapshot = (id) => api.delete(`/networth/snapshot/${id}`)
 
 // Family
 export const getFamily = () => api.get('/family')
 export const joinFamily = (code) => api.post('/family/join', { invite_code: code })
 export const listFamilyMembers = () => api.get('/family/members')
-export const getFamilyTrend = (days = 30) => api.get('/assets/family/trend', { params: { days } })
+export const getFamilyTrend = (days = 30, start = null, end = null) => {
+  const params = { days }
+  if (start) params.start = start
+  if (end) params.end = end
+  return api.get('/assets/family/trend', { params })
+}
 
 // User Settings (跨设备同步)
 export const getUserSettings = () => api.get('/user/settings')

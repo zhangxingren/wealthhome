@@ -1,9 +1,12 @@
-"""家庭管理 — 加入/查看/退出家庭"""
+"""家庭管理 — 加入/查看/退出家庭
+
+分层架构：Router → Repository → Database
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from app.database import get_db
-from app.auth import get_current_user
+from app.core.auth import get_current_user
+from app.repositories.asset_repo import raw_query, raw_query_one, raw_execute
 
 router = APIRouter(prefix="/api/family", tags=["家庭"])
 
@@ -15,16 +18,15 @@ class JoinRequest(BaseModel):
 @router.get("")
 def get_family(user=Depends(get_current_user)):
     uid = int(user["sub"])
-    with get_db() as db:
-        user_row = db.execute("SELECT family_id FROM users WHERE id=?", (uid,)).fetchone()
-        if not user_row or not user_row["family_id"]:
-            raise HTTPException(status_code=404, detail="未加入家庭")
+    user_row = raw_query_one("SELECT family_id FROM users WHERE id=?", (uid,))
+    if not user_row or not user_row["family_id"]:
+        raise HTTPException(status_code=404, detail="未加入家庭")
 
-        fam = db.execute("SELECT * FROM families WHERE id=?", (user_row["family_id"],)).fetchone()
-        members = db.execute(
-            "SELECT id, username, role, display_name, created_at FROM users WHERE family_id=? ORDER BY id",
-            (user_row["family_id"],)
-        ).fetchall()
+    fam = raw_query_one("SELECT * FROM families WHERE id=?", (user_row["family_id"],))
+    members = raw_query(
+        "SELECT id, username, role, display_name, created_at FROM users WHERE family_id=? ORDER BY id",
+        (user_row["family_id"],),
+    )
 
     return {
         "family": dict(fam),
@@ -35,16 +37,15 @@ def get_family(user=Depends(get_current_user)):
 @router.post("/join")
 def join_family(body: JoinRequest, user=Depends(get_current_user)):
     uid = int(user["sub"])
-    with get_db() as db:
-        fam = db.execute("SELECT id, name FROM families WHERE invite_code=?", (body.invite_code.upper(),)).fetchone()
-        if not fam:
-            raise HTTPException(status_code=404, detail="邀请码无效")
+    fam = raw_query_one("SELECT id, name FROM families WHERE invite_code=?", (body.invite_code.upper(),))
+    if not fam:
+        raise HTTPException(status_code=404, detail="邀请码无效")
 
-        current = db.execute("SELECT family_id FROM users WHERE id=?", (uid,)).fetchone()
-        if current["family_id"] == fam["id"]:
-            raise HTTPException(status_code=409, detail="你已在该家庭中")
+    current = raw_query_one("SELECT family_id FROM users WHERE id=?", (uid,))
+    if current["family_id"] == fam["id"]:
+        raise HTTPException(status_code=409, detail="你已在该家庭中")
 
-        db.execute("UPDATE users SET family_id=? WHERE id=?", (fam["id"], uid))
+    raw_execute("UPDATE users SET family_id=? WHERE id=?", (fam["id"], uid))
 
     return {"message": f"已加入「{fam['name']}」", "family_id": fam["id"], "family_name": fam["name"]}
 
@@ -52,13 +53,12 @@ def join_family(body: JoinRequest, user=Depends(get_current_user)):
 @router.get("/members")
 def list_members(user=Depends(get_current_user)):
     uid = int(user["sub"])
-    with get_db() as db:
-        user_row = db.execute("SELECT family_id FROM users WHERE id=?", (uid,)).fetchone()
-        if not user_row or not user_row["family_id"]:
-            return {"members": []}
+    user_row = raw_query_one("SELECT family_id FROM users WHERE id=?", (uid,))
+    if not user_row or not user_row["family_id"]:
+        return {"members": []}
 
-        members = db.execute(
-            "SELECT id, username, role, display_name, created_at FROM users WHERE family_id=? ORDER BY id",
-            (user_row["family_id"],)
-        ).fetchall()
+    members = raw_query(
+        "SELECT id, username, role, display_name, created_at FROM users WHERE family_id=? ORDER BY id",
+        (user_row["family_id"],),
+    )
     return {"members": [dict(m) for m in members]}

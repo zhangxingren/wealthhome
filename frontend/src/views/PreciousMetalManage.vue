@@ -15,15 +15,15 @@
     <div class="pm-summary-cards" v-if="summary.total_cost > 0">
       <div class="pm-summary-item">
         <div class="pm-summary-label">总成本</div>
-        <div class="pm-summary-value">¥{{ formatAmount(summary.total_cost) }}</div>
+        <div class="pm-summary-value">{{ formatAmount(summary.total_cost) }}</div>
       </div>
       <div class="pm-summary-item">
         <div class="pm-summary-label">总市值</div>
-        <div class="pm-summary-value">¥{{ formatAmount(summary.total_market_value) }}</div>
+        <div class="pm-summary-value">{{ formatAmount(summary.total_market_value) }}</div>
       </div>
       <div class="pm-summary-item" :class="{ profit: summary.total_profit >= 0, loss: summary.total_profit < 0 }">
         <div class="pm-summary-label">总盈亏</div>
-        <div class="pm-summary-value">{{ summary.total_profit >= 0 ? '+' : '' }}¥{{ formatAmount(summary.total_profit) }}</div>
+        <div class="pm-summary-value">{{ summary.total_profit >= 0 ? formatAmount(summary.total_profit) : '¥-' + formatAmountNumber(Math.abs(summary.total_profit)) }}</div>
       </div>
       <div class="pm-summary-item" :class="{ profit: summary.total_profit >= 0, loss: summary.total_profit < 0 }">
         <div class="pm-summary-label">盈亏率</div>
@@ -33,42 +33,42 @@
 
     <div class="page-card-body">
       <el-table :data="list" v-loading="loading" empty-text="暂无贵金属持仓">
-        <el-table-column prop="name" label="名称" min-width="100" />
-        <el-table-column label="类型" width="80">
+        <el-table-column prop="name" label="名称" min-width="90" show-overflow-tooltip />
+        <el-table-column label="类型" width="65">
           <template #default="{row}">
             <el-tag :type="typeTagColor(row.type)" size="small">{{ row.type_label }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="持有克数" width="110">
-          <template #default="{row}">{{ row.weight_grams.toLocaleString() }} g</template>
+        <el-table-column label="克数" width="75">
+          <template #default="{row}">{{ row.weight_grams.toLocaleString() }}g</template>
         </el-table-column>
-        <el-table-column label="买入单价" width="110">
+        <el-table-column label="买入单价" min-width="88">
           <template #default="{row}">¥{{ row.buy_price_per_gram.toFixed(2) }}/g</template>
         </el-table-column>
-        <el-table-column label="买入总价" width="130">
-          <template #default="{row}">¥{{ formatAmount(row.buy_total) }}</template>
+        <el-table-column label="买入总价" min-width="100">
+          <template #default="{row}">{{ formatAmount(row.buy_total) }}</template>
         </el-table-column>
-        <el-table-column label="当前市价" width="110">
+        <el-table-column label="现价" min-width="88">
           <template #default="{row}">
             <span v-if="row.current_price_per_gram">¥{{ row.current_price_per_gram.toFixed(2) }}/g</span>
-            <span v-else class="text-muted">未获取</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="当前市值" width="130">
-          <template #default="{row}">
-            <span v-if="row.current_price_per_gram">¥{{ formatAmount(row.current_value) }}</span>
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="盈亏金额" width="130">
+        <el-table-column label="市值" min-width="100">
           <template #default="{row}">
-            <span v-if="row.current_price_per_gram" :style="{color: row.profit >= 0 ? '#10b981' : '#ef4444'}">
-              {{ row.profit >= 0 ? '+' : '' }}¥{{ formatAmount(row.profit) }}
+            <span v-if="row.current_price_per_gram">{{ formatAmount(row.current_value) }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="盈亏金额" min-width="110">
+          <template #default="{row}">
+            <span v-if="row.current_price_per_gram" :style="{color: row.profit >= 0 ? '#10b981' : '#ef4444'}" class="font-mono">
+              {{ row.profit >= 0 ? formatAmount(row.profit) : '¥-' + formatAmountNumber(Math.abs(row.profit)) }}
             </span>
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="盈亏%" width="90">
+        <el-table-column label="盈亏%" width="75">
           <template #default="{row}">
             <span v-if="row.current_price_per_gram" :style="{color: row.profit >= 0 ? '#10b981' : '#ef4444'}">
               {{ row.profit_pct >= 0 ? '+' : '' }}{{ row.profit_pct.toFixed(1) }}%
@@ -76,10 +76,10 @@
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="买入日期" width="110">
+        <el-table-column label="买入日期" width="100">
           <template #default="{row}">{{ row.buy_date }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" min-width="140" fixed="right">
           <template #default="{row}">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="del(row.id)">删除</el-button>
@@ -129,6 +129,8 @@ import {
   refreshPreciousMetalPrices, getPreciousMetalSummary, getAssetTrend,
 } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useTimeRangeStore } from '../stores/timeRange'
+import { formatAmount, formatAmountNumber } from '../composables/useAmountFormat'
 import TrendChart from '../components/TrendChart.vue'
 
 const list = ref([])
@@ -139,6 +141,7 @@ const dialog = ref(false)
 const editing = ref(null)
 const summary = reactive({ total_cost: 0, total_market_value: 0, total_profit: 0, total_profit_pct: 0, count: 0 })
 const trendData = ref([])
+const timeStore = useTimeRangeStore()
 
 const form = reactive({
   name: '', type: 'gold', weight_grams: 0, buy_price_per_gram: 0,
@@ -161,10 +164,6 @@ watch(
 // 监听买入总价输入框的 focus 事件 — 用户一旦修改则标记为手动设置
 function onBuyTotalInput() {
   buyTotalManuallySet.value = true
-}
-
-function formatAmount(v) {
-  return Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function typeTagColor(type) {
@@ -256,50 +255,9 @@ async function refreshPrices() {
 onMounted(() => { load(); loadTrend() })
 
 async function loadTrend() {
-  try { const { data } = await getAssetTrend('precious_metal', 30); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
+  try { const { data } = await getAssetTrend('precious_metal', 30, timeStore.start, timeStore.end); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
 }
+
+watch(() => [timeStore.start, timeStore.end], () => { loadTrend() })
 </script>
 
-<style scoped>
-.pm-summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: var(--md-surface-container-low);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--md-outline-variant);
-}
-
-.pm-summary-item {
-  text-align: center;
-  padding: 8px;
-}
-
-.pm-summary-label {
-  font-size: 12px;
-  color: var(--c-text-tertiary);
-  margin-bottom: 4px;
-}
-
-.pm-summary-value {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--c-text);
-}
-
-.pm-summary-item.profit .pm-summary-value {
-  color: #10b981;
-}
-
-.pm-summary-item.loss .pm-summary-value {
-  color: #ef4444;
-}
-
-.text-muted {
-  color: var(--c-text-tertiary);
-  font-size: 13px;
-}
-</style>

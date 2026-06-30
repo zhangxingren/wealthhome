@@ -1,18 +1,43 @@
+# =============================================
+# WealthHome Docker Compose - 飞牛 OS NAS 部署
+#
+# 使用方式：
+#   1. 构建前端: cd frontend && npm run build
+#   2. 启动服务: docker-compose up -d
+#   3. 查看日志: docker-compose logs -f
+#   4. 停止服务: docker-compose down
+# =============================================
+
+version: "3.8"
+
 services:
   wealthhome:
-    build: .
+    image: wealthhome:latest
     container_name: wealthhome
     restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - wealthhome_data:/app/data
     environment:
+      # ⚠️ 生产环境请更换为随机强密码（可用 openssl rand -hex 32 生成）
+      - JWT_SECRET=wealthhome-prod-change-me-please
       - DB_PATH=/app/data/wealthhome.db
-      - JWT_SECRET=Wh7-kM3pRx9vL2nQf8aBcD4eFg6HiJ1k
-      - CORS_ORIGINS=http://localhost:5173
-      - TUSHARE_TOKEN=your-tushare-token
-      - MARKET_REFRESH_INTERVAL=0
+      # 首次启动自动创建的管理员账号
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-on-first-login}
+      # 可选：填你自己的 Tushare Token 用于股票行情
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+    volumes:
+      # 数据库持久化
+      - wealthhome_data:/app/data
+      # 可选：挂载日志目录
+      # - ./logs:/app/logs
+    networks:
+      - wealthhome_net
 
 volumes:
   wealthhome_data:
+    name: wealthhome_data
+
+networks:
+  wealthhome_net:
+    name: wealthhome_net

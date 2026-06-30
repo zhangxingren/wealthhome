@@ -35,7 +35,23 @@
     <div class="page-card">
       <div class="page-card-header">
         <h3>净值趋势</h3>
-        <el-button size="small" @click="loadAll">刷新</el-button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <el-radio-group v-model="selectedPreset" size="small">
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="1m">一月</el-radio-button>
+            <el-radio-button value="3m">三月</el-radio-button>
+            <el-radio-button value="6m">半年</el-radio-button>
+            <el-radio-button value="1y">一年</el-radio-button>
+          </el-radio-group>
+          <el-button size="small" :type="timeStore.preset === 'custom' ? 'primary' : ''"
+            @click="selectedPreset = 'custom'" text>自定义</el-button>
+          <template v-if="timeStore.preset === 'custom'">
+            <el-date-picker v-model="localCustomStart" type="date" placeholder="开始" size="small" style="width:130px" />
+            <span style="color:var(--c-text-tertiary);flex-shrink:0;">至</span>
+            <el-date-picker v-model="localCustomEnd" type="date" placeholder="结束" size="small" style="width:130px" />
+          </template>
+          <el-button size="small" @click="loadAll">刷新</el-button>
+        </div>
       </div>
       <div class="page-card-body">
         <div ref="chartRef" class="chart-container" v-show="displaySnapshots.length > 0"></div>
@@ -47,8 +63,13 @@
     </div>
 
     <div class="page-card" style="margin-top:24px;">
-      <div class="page-card-header"><h3>历史快照</h3></div>
-      <div class="page-card-body">
+      <div class="page-card-header">
+        <h3>历史快照</h3>
+        <el-button text type="primary" @click="showHistoryTable = !showHistoryTable">
+          {{ showHistoryTable ? '收起' : '展开' }}
+        </el-button>
+      </div>
+      <div class="page-card-body" v-if="showHistoryTable">
         <el-table :data="snapshots" empty-text="暂无快照">
           <el-table-column prop="snap_date" label="日期" width="120" />
           <el-table-column label="总资产" width="150">
@@ -78,8 +99,16 @@ import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatAmount } from '../composables/useAmountFormat'
 import { usePrivacy } from '../composables/usePrivacy'
+import { useTimeRangeStore } from '../stores/timeRange'
 
 const { privacyMode, hiddenAssets } = usePrivacy()
+const timeStore = useTimeRangeStore()
+
+// 本地 ref 做桥接，避免 Pinia store 直接绑定 el-radio-group 时丢失响应性
+const selectedPreset = ref(timeStore.preset)
+// 自定义日期也用本地 ref 桥接
+const localCustomStart = ref(timeStore.customStart)
+const localCustomEnd = ref(timeStore.customEnd)
 
 const current = reactive({
   net_worth: 0, total_asset: 0, total_liability: 0,
@@ -89,6 +118,7 @@ const lastSnapshot = ref(null)
 const snapshots = ref([])
 const chartRef = ref(null)
 let chart = null
+const showHistoryTable = ref(false)
 
 // ── 工具函数 ──
 function fmt(val) {
@@ -124,14 +154,24 @@ const displaySnapshots = computed(() => {
 // ── 数据加载 ──
 async function loadAll() {
   try {
+    console.log('[NetWorth] loadAll called, timeRange:', {
+      preset: timeStore.preset,
+      start: timeStore.start,
+      end: timeStore.end,
+    })
     const { data: s } = await getSummary()
     Object.assign(current, s)
-    const { data: snaps } = await listSnapshots()
+    const params = {}
+    if (timeStore.start) params.start = timeStore.start
+    if (timeStore.end) params.end = timeStore.end
+    const { data: snaps } = await listSnapshots(params)
     snapshots.value = snaps || []
     if (snaps.length > 0) lastSnapshot.value = snaps[snaps.length - 1]
     await nextTick()
     if (displaySnapshots.value.length > 0) renderChart()
-  } catch { /* empty */ }
+  } catch (e) {
+    console.error('[NetWorth] loadAll 出错:', e)
+  }
 }
 
 async function takeSnap() {
@@ -152,6 +192,23 @@ function renderChart() {
   const values = snaps.map(d => d.net_worth)
   const isPrivate = privacyMode.value
 
+  const yAxisConfig = {
+    type: 'value',
+    axisLabel: {
+      color: '#94a3b8',
+      formatter: isPrivate ? () => '***' : v => '¥' + (v / 10000).toFixed(0) + 'w',
+    },
+  }
+  // 断轴：Y 轴基于数值量级取整，保留 2 位有效数字精度
+  if (!isPrivate) {
+    const minVal = Math.min(...values.filter(v => !isNaN(v)))
+    if (minVal > 0) {
+      const magnitude = Math.pow(10, Math.floor(Math.log10(Math.abs(minVal))) - 1)
+      const axisMin = Math.floor(minVal / magnitude) * magnitude
+      yAxisConfig.min = axisMin > 0 ? axisMin : 0
+    }
+  }
+
   chart.setOption({
     tooltip: {
       trigger: 'axis',
@@ -164,13 +221,7 @@ function renderChart() {
       type: 'category', data: dates,
       axisLabel: { color: '#94a3b8' },
     },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        color: '#94a3b8',
-        formatter: isPrivate ? () => '***' : v => '¥' + (v / 10000).toFixed(0) + 'w',
-      },
-    },
+    yAxis: yAxisConfig,
     series: [{
       data: values, type: 'line', smooth: true,
       symbol: isPrivate ? 'none' : 'circle', symbolSize: 6,
@@ -199,5 +250,37 @@ watch([privacyMode, hiddenAssets], () => {
   })
 }, { deep: true })
 
+// 监听本地 selectedPreset 变化 → 同步到 store 并重新加载
+watch(selectedPreset, (val) => {
+  console.log('[NetWorth] selectedPreset changed to:', val)
+  timeStore.preset = val
+  loadAll()
+})
+
+// 外部改变 timeStore.preset 时同步回本地 ref（比如其他组件改了全局时间范围）
+watch(() => timeStore.preset, (val) => {
+  if (selectedPreset.value !== val) {
+    selectedPreset.value = val
+  }
+})
+
+// 自定义日期变化 → 同步到 store 并重新加载
+watch([localCustomStart, localCustomEnd], ([s, e]) => {
+  timeStore.customStart = s
+  timeStore.customEnd = e
+  if (timeStore.preset === 'custom') {
+    console.log('[NetWorth] custom date changed via watch:', { start: s, end: e })
+    loadAll()
+  }
+})
+
 onMounted(loadAll)
 </script>
+
+<style scoped>
+/* 竖屏 / 窄屏适配：让标题和工具栏可以换行 */
+:deep(.page-card-header) {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+</style>

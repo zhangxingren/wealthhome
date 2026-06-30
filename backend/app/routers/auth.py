@@ -5,8 +5,8 @@ import secrets
 import string
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
-from app.database import get_db
-from app.auth import hash_password, verify_password, create_token, get_current_user, require_admin
+from app.core.database import get_db
+from app.core.auth import hash_password, verify_password, create_token, get_current_user, require_admin
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 

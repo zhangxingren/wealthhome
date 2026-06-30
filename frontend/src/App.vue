@@ -4,11 +4,14 @@
     <!-- === MD3 可折叠侧边栏 === -->
     <aside class="app-sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        <span class="nav-icon" style="transform:scale(1.2);margin-left:-2px;margin-right:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        </span>
         <span class="logo-text">Wealth<span class="logo-accent">Home</span></span>
       </div>
 
       <nav class="sidebar-nav">
+
         <!-- 概览 -->
         <div class="nav-group">
           <router-link to="/" class="nav-item" exact-active-class="active">
@@ -195,7 +198,7 @@ function getSidebarKey() {
 const sidebarCollapsed = ref(localStorage.getItem(getSidebarKey()) === 'true')
 
 const unitLabel = computed(() => formatLabel())
-const { privacyMode, togglePrivacy, saveSettings } = usePrivacy()
+const { privacyMode, togglePrivacy, saveSettings, resetPrivacy } = usePrivacy()
 
 const titles = {
   '/': '仪表盘', '/cash': '现金存款', '/deposit': '定期存单',
@@ -269,6 +272,7 @@ async function handleSaveSettings() {
 watch(isLoginPage, (now) => {
   if (!now) {
     // 从登录页切回：先重置 displayName 为 localStorage 中的 username，再异步从 API 拉最新 profile
+    resetPrivacy()
     displayName.value = localStorage.getItem('displayName') || localStorage.getItem('username') || '用户'
     loadProfile()
   }

@@ -6,20 +6,20 @@
     </div>
     <div class="page-card-body">
       <el-table :data="list" v-loading="loading" empty-text="暂无负债">
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="principal" label="本金" width="130">
+        <el-table-column prop="name" label="名称" min-width="90" show-overflow-tooltip />
+        <el-table-column prop="principal" label="本金" min-width="110">
           <template #default="{row}">{{ formatAmount(row.principal) }}</template>
         </el-table-column>
-        <el-table-column prop="rate" label="年利率(%)" width="100" />
-        <el-table-column prop="term_months" label="期限(月)" width="90" />
-        <el-table-column prop="repay_type" label="还款方式" width="100" />
-        <el-table-column prop="monthly_payment" label="月供" width="120">
+        <el-table-column prop="rate" label="年利率(%)" width="90" />
+        <el-table-column prop="term_months" label="期限(月)" width="80" />
+        <el-table-column prop="repay_type" label="还款方式" width="90" />
+        <el-table-column prop="monthly_payment" label="月供" width="110">
           <template #default="{row}">{{ formatAmount(row.monthly_payment) }}</template>
         </el-table-column>
-        <el-table-column prop="remaining" label="剩余本金" width="130">
+        <el-table-column prop="remaining" label="剩余本金" min-width="105">
           <template #default="{row}">{{ formatAmount(row.remaining) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" min-width="180" fixed="right">
           <template #default="{row}">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" @click="viewPlan(row)">还款计划</el-button>
@@ -80,16 +80,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { listLiabilities, createLiability, updateLiability, deleteLiability, getRepayPlan, getAssetTrend } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatAmount } from '../composables/useAmountFormat'
+import { useTimeRangeStore } from '../stores/timeRange'
 import TrendChart from '../components/TrendChart.vue'
 
 const list = ref([]); const loading = ref(false); const saving = ref(false)
 const dialog = ref(false); const planDialog = ref(false)
 const editing = ref(null); const planData = ref(null)
 const trendData = ref([])
+const timeStore = useTimeRangeStore()
 const form = reactive({ name: '', principal: 0, rate: 0, term_months: 12, repay_type: '等额本息', start_date: '', note: '' })
 
 async function load() { loading.value = true; try { const { data } = await listLiabilities(); list.value = data || [] } catch { list.value = [] } finally { loading.value = false } }
@@ -102,6 +104,9 @@ async function save() {
 }
 async function viewPlan(row) { const { data } = await getRepayPlan(row.id); planData.value = data; planDialog.value = true }
 async function del(id) { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteLiability(id); ElMessage.success('已删除'); await load() }
-async function loadTrend() { try { const { data } = await getAssetTrend('total_liability', 30); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] } }
+async function loadTrend() { try { const { data } = await getAssetTrend('total_liability', 30, timeStore.start, timeStore.end); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] } }
+// 时间范围变化时重新加载趋势
+watch(() => [timeStore.start, timeStore.end], () => { loadTrend() })
+
 onMounted(() => { load(); loadTrend() })
 </script>

@@ -1,14 +1,25 @@
-"""负债管理 — 等额本息 / 等额本金 + 还款计划表"""
+"""负债管理 — 等额本息 / 等额本金 + 还款计划表
 
-from datetime import datetime, timedelta
+分层架构：Router → Repository → Database
+"""
+
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field
-from app.database import get_db
-from app.auth import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core.auth import get_current_user
+from app.models.assets import LiabilityCreate, LiabilityUpdate
+from app.repositories.asset_repo import (
+    create_asset, get_by_id, list_by_user,
+    update_asset, delete_asset, exists,
+    raw_query_one, raw_execute,
+)
+
+TABLE = "liabilities"
 
 router = APIRouter(prefix="/api/liabilities", tags=["负债"])
 
+
+# ─── 还款计算逻辑 ──────────────────────────────────────
 
 def _calc_equal_installment(principal: float, annual_rate: float, months: int):
     """等额本息：返回 (月供, 总利息, 还款计划列表)"""
@@ -56,111 +67,103 @@ def _calc_equal_principal(principal: float, annual_rate: float, months: int):
     return plan[0]["月供"], total_interest, plan
 
 
-class LiabilityIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=64)
-    principal: float = Field(..., gt=0, le=1e12)
-    rate: float = Field(..., ge=0, le=100)
-    term_months: int = Field(..., gt=0)
-    repay_type: str = Field(default="等额本息", pattern="^(等额本息|等额本金)$")
-    start_date: str = Field(..., description="YYYY-MM-DD")
-    note: str = ""
+def _calc_monthly(body) -> tuple:
+    """根据还款方式计算月供和总利息"""
+    if body.repay_type == "等额本息":
+        return _calc_equal_installment(body.principal, body.rate, body.term_months)[:2]
+    else:
+        return _calc_equal_principal(body.principal, body.rate, body.term_months)[:2]
 
 
 def _row(r) -> dict:
-    return {"id": r["id"], "user_id": r["user_id"], "name": r["name"], "principal": r["principal"],
-            "rate": r["rate"], "term_months": r["term_months"], "repay_type": r["repay_type"],
+    return {"id": r["id"], "user_id": r["user_id"], "name": r["name"],
+            "principal": r["principal"], "rate": r["rate"],
+            "term_months": r["term_months"], "repay_type": r["repay_type"],
             "start_date": r["start_date"], "monthly_payment": r["monthly_payment"],
             "remaining": r["remaining"], "note": r["note"], "created_at": r["created_at"]}
 
 
+# ─── CRUD 端点 ─────────────────────────────────────────
+
 @router.get("")
-def list_liabilities(limit: int = Query(default=100), offset: int = Query(default=0), user=Depends(get_current_user)):
-    with get_db() as db:
-        rows = db.execute(
-            "SELECT * FROM liabilities WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?",
-            (int(user["sub"]), limit, offset),
-        ).fetchall()
-    return [_row(r) for r in rows]
+def list_liabilities(limit: int = Query(default=100), offset: int = Query(default=0),
+                     user=Depends(get_current_user)):
+    items = list_by_user(TABLE, int(user["sub"]), limit, offset)
+    return [_row(r) for r in items]
 
 
 @router.post("", status_code=201)
-def create_liability(body: LiabilityIn, user=Depends(get_current_user)):
-    if body.repay_type == "等额本息":
-        monthly, total_interest, _ = _calc_equal_installment(body.principal, body.rate, body.term_months)
-    else:
-        monthly, total_interest, _ = _calc_equal_principal(body.principal, body.rate, body.term_months)
-
-    with get_db() as db:
-        cur = db.execute(
-            "INSERT INTO liabilities (user_id,name,principal,rate,term_months,repay_type,start_date,monthly_payment,remaining,note) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (int(user["sub"]), body.name, body.principal, body.rate, body.term_months,
-             body.repay_type, body.start_date, monthly, body.principal, body.note))
-        row = db.execute("SELECT * FROM liabilities WHERE id=?", (cur.lastrowid,)).fetchone()
+def create_liability(body: LiabilityCreate, user=Depends(get_current_user)):
+    monthly, total_interest = _calc_monthly(body)
+    data = {
+        "user_id": int(user["sub"]),
+        "name": body.name, "principal": body.principal, "rate": body.rate,
+        "term_months": body.term_months, "repay_type": body.repay_type,
+        "start_date": body.start_date, "monthly_payment": monthly,
+        "remaining": body.principal, "note": body.note or "",
+    }
+    new_id = create_asset(TABLE, data)
+    row = get_by_id(TABLE, new_id)
     result = _row(row)
     result["total_interest"] = total_interest
     return result
 
 
 @router.put("/{liability_id}")
-def update_liability(liability_id: int, body: LiabilityIn, user=Depends(get_current_user)):
-    with get_db() as db:
-        r = db.execute("SELECT id FROM liabilities WHERE id=? AND user_id=?", (liability_id, int(user["sub"]))).fetchone()
-        if not r:
-            raise HTTPException(status_code=404, detail="负债不存在")
-        if body.repay_type == "等额本息":
-            monthly, _, _ = _calc_equal_installment(body.principal, body.rate, body.term_months)
-        else:
-            monthly, _, _ = _calc_equal_principal(body.principal, body.rate, body.term_months)
-        db.execute(
-            "UPDATE liabilities SET name=?,principal=?,rate=?,term_months=?,repay_type=?,start_date=?,monthly_payment=?,note=? WHERE id=?",
-            (body.name, body.principal, body.rate, body.term_months, body.repay_type,
-             body.start_date, monthly, body.note, liability_id))
-        row = db.execute("SELECT * FROM liabilities WHERE id=?", (liability_id,)).fetchone()
+def update_liability(liability_id: int, body: LiabilityCreate, user=Depends(get_current_user)):
+    uid = int(user["sub"])
+    if not exists(TABLE, liability_id, uid):
+        raise HTTPException(status_code=404, detail="负债不存在")
+
+    monthly, _ = _calc_monthly(body)
+    data = {
+        "name": body.name, "principal": body.principal, "rate": body.rate,
+        "term_months": body.term_months, "repay_type": body.repay_type,
+        "start_date": body.start_date, "monthly_payment": monthly,
+        "note": body.note or "",
+    }
+    update_asset(TABLE, liability_id, uid, data)
+    row = get_by_id(TABLE, liability_id)
     return _row(row)
 
 
 @router.delete("/{liability_id}", status_code=204)
 def delete_liability(liability_id: int, user=Depends(get_current_user)):
-    with get_db() as db:
-        r = db.execute("DELETE FROM liabilities WHERE id=? AND user_id=?", (liability_id, int(user["sub"])))
-        if r.rowcount == 0:
-            raise HTTPException(status_code=404, detail="负债不存在")
+    if not delete_asset(TABLE, liability_id, int(user["sub"])):
+        raise HTTPException(status_code=404, detail="负债不存在")
 
 
 @router.get("/{liability_id}/plan")
 def repayment_plan(liability_id: int, user=Depends(get_current_user)):
     """生成还款计划表（含每期日期）"""
-    with get_db() as db:
-        r = db.execute("SELECT * FROM liabilities WHERE id=? AND user_id=?", (liability_id, int(user["sub"]))).fetchone()
-        if not r:
-            raise HTTPException(status_code=404, detail="负债不存在")
+    uid = int(user["sub"])
+    data = get_by_id(TABLE, liability_id, uid)
+    if not data:
+        raise HTTPException(status_code=404, detail="负债不存在")
 
-    info = dict(r)
-    if info["repay_type"] == "等额本息":
-        _, total_interest, plan = _calc_equal_installment(info["principal"], info["rate"], info["term_months"])
+    if data["repay_type"] == "等额本息":
+        _, total_interest, plan = _calc_equal_installment(data["principal"], data["rate"], data["term_months"])
     else:
-        _, total_interest, plan = _calc_equal_principal(info["principal"], info["rate"], info["term_months"])
+        _, total_interest, plan = _calc_equal_principal(data["principal"], data["rate"], data["term_months"])
 
-    # 补充每期还款日期
-    start = datetime.strptime(info["start_date"], "%Y-%m-%d")
+    start = datetime.strptime(data["start_date"], "%Y-%m-%d")
     for i, item in enumerate(plan):
         item["还款日期"] = (start + relativedelta(months=i)).strftime("%Y-%m-%d")
 
     return {
-        "liability": {"id": info["id"], "name": info["name"], "principal": info["principal"],
-                      "rate": info["rate"], "term_months": info["term_months"],
-                      "repay_type": info["repay_type"], "monthly_payment": info["monthly_payment"]},
+        "liability": {"id": data["id"], "name": data["name"], "principal": data["principal"],
+                      "rate": data["rate"], "term_months": data["term_months"],
+                      "repay_type": data["repay_type"], "monthly_payment": data["monthly_payment"]},
         "total_interest": total_interest,
         "plan": plan,
     }
 
 
 @router.put("/{liability_id}/remaining")
-def update_remaining(liability_id: int, remaining: float = Query(..., ge=0), user=Depends(get_current_user)):
-    """手动更新剩余本金（提前还款等场景）"""
-    with get_db() as db:
-        r = db.execute("SELECT id FROM liabilities WHERE id=? AND user_id=?", (liability_id, int(user["sub"]))).fetchone()
-        if not r:
-            raise HTTPException(status_code=404, detail="负债不存在")
-        db.execute("UPDATE liabilities SET remaining=? WHERE id=?", (remaining, liability_id))
+def update_remaining(liability_id: int, remaining: float = Query(..., ge=0),
+                     user=Depends(get_current_user)):
+    uid = int(user["sub"])
+    if not exists(TABLE, liability_id, uid):
+        raise HTTPException(status_code=404, detail="负债不存在")
+    raw_execute("UPDATE liabilities SET remaining=? WHERE id=?", (remaining, liability_id))
     return {"id": liability_id, "remaining": remaining}

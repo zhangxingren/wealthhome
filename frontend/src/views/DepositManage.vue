@@ -6,30 +6,30 @@
     </div>
     <div class="page-card-body">
       <el-table :data="list" v-loading="loading" empty-text="暂无定期存单">
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="bank" label="银行" width="100" />
-        <el-table-column label="本金" width="130">
+        <el-table-column prop="name" label="名称" min-width="90" show-overflow-tooltip />
+        <el-table-column prop="bank" label="银行" min-width="80" show-overflow-tooltip />
+        <el-table-column label="本金" min-width="110">
           <template #default="{row}">{{ formatAmount(row.principal) }}</template>
         </el-table-column>
-        <el-table-column prop="rate" label="年利率(%)" width="100" />
-        <el-table-column label="已得利息" width="130">
+        <el-table-column prop="rate" label="年利率(%)" width="90" />
+        <el-table-column label="已得利息" width="110">
           <template #default="{row}">
             <span class="interest-badge" @click="showInterest(row.id)">
-              {{ row._interest ? formatAmount(row._interest.accrued_interest) : '点击查看' }}
+              {{ row._interest ? formatAmount(row._interest.accrued_interest) : '查看' }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="计息进度" width="110">
+        <el-table-column label="计息进度" width="90">
           <template #default="{row}">
             <el-progress v-if="row._interest" :percentage="row._interest.progress_pct" :stroke-width="6"
-              :show-text="false" style="width:60px" />
+              :show-text="false" style="width:50px" />
             <span v-else style="color:#94a3b8; font-size:12px;">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="start_date" label="起息日" width="110" />
-        <el-table-column prop="end_date" label="到期日" width="110" />
-        <el-table-column prop="note" label="备注" min-width="80" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column prop="start_date" label="起息日" width="100" />
+        <el-table-column prop="end_date" label="到期日" width="100" />
+        <el-table-column prop="note" label="备注" min-width="80" show-overflow-tooltip />
+        <el-table-column label="操作" min-width="140" fixed="right">
           <template #default="{row}">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="del(row.id)">删除</el-button>
@@ -79,11 +79,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { listDeposit, createDeposit, updateDeposit, deleteDeposit, getDepositInterest, getAssetTrend } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatAmount } from '../composables/useAmountFormat'
+import { useTimeRangeStore } from '../stores/timeRange'
 import TrendChart from '../components/TrendChart.vue'
+
+const timeStore = useTimeRangeStore()
 
 const list = ref([])
 const loading = ref(false)
@@ -135,10 +138,11 @@ async function del(id) {
   await deleteDeposit(id); ElMessage.success('已删除'); await load()
 }
 async function loadTrend() {
-  try { const { data } = await getAssetTrend('deposit', 30); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
+  try { const { data } = await getAssetTrend('deposit', 30, timeStore.start, timeStore.end); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
 }
 
 onMounted(() => { load(); loadTrend() })
+watch(() => [timeStore.start, timeStore.end], () => { loadTrend() })
 </script>
 
 <style scoped>

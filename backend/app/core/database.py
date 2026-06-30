@@ -3,7 +3,7 @@
 import sqlite3
 import os
 from contextlib import contextmanager
-from app.config import settings
+from app.core.config import settings
 
 
 def get_db_path() -> str:
@@ -26,6 +26,24 @@ def get_db():
         raise
     finally:
         db.close()
+
+
+def _ensure_indexes(db):
+    """确保常用查询列有索引（幂等）"""
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_user_date ON net_worth_snapshots(user_id, snap_date)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_cash_user ON asset_cash(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_deposit_user ON asset_deposit(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_fund_user ON asset_fund(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_stock_user ON asset_stock(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_bond_user ON asset_bond(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_assets_precious_user ON asset_precious_metal(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_liabilities_user ON liabilities(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_users_family ON users(family_id)",
+        "CREATE INDEX IF NOT EXISTS idx_settings_user_key ON user_settings(user_id, setting_key)",
+    ]
+    for sql in indexes:
+        db.execute(sql)
 
 
 def init_db():
@@ -199,3 +217,6 @@ def init_db():
             db.execute("UPDATE asset_bond SET current_price = face_value WHERE current_price = 0 AND face_value > 0")
         except Exception:
             pass
+
+        # -- ensure performance indexes exist (idempotent)
+        _ensure_indexes(db)

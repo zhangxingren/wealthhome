@@ -152,6 +152,12 @@ export function usePrivacy() {
     return formattedValue
   }
 
+  function resetPrivacy() {
+    remoteLoaded.value = false
+    initPromise = null
+    ensureRemoteLoaded()
+  }
+
   return {
     privacyMode,
     hiddenAssets,
@@ -164,5 +170,6 @@ export function usePrivacy() {
     toggleFamilyHidden,
     isFamilyHidden,
     formatPrivacy,
+    resetPrivacy,
   }
 }

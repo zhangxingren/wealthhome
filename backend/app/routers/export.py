@@ -8,8 +8,8 @@ from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from app.database import get_db
-from app.auth import get_current_user
+from app.core.database import get_db
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/api/export", tags=["导出"])
 
@@ -74,7 +74,7 @@ def export_excel(
         ("fund",    "基金持仓", "SELECT code,name,shares,cost_nav,current_nav,fund_type,note,tags FROM asset_fund WHERE user_id=? ORDER BY id", ["基金代码","名称","份额","成本净值","当前净值","类型","备注","标签"], [12,16,12,12,12,10,20,14], lambda r: [r[i] for i in range(8)]),
         ("stock",   "股票持仓", "SELECT code,name,shares,cost_price,current_price,market,note,tags FROM asset_stock WHERE user_id=? ORDER BY id", ["股票代码","名称","持股数","成本价","当前价","市场","备注","标签"], [12,16,12,12,12,8,20,14], lambda r: [r[i] for i in range(8)]),
         ("bond",    "债权",    "SELECT name,issuer,face_value,rate,maturity_date,currency,note,tags FROM asset_bond WHERE user_id=? ORDER BY id", ["名称","发行方","面值","年利率(%)","到期日","币种","备注","标签"], [16,16,14,12,12,8,20,14], lambda r: [r[i] for i in range(8)]),
-        ("precious_metal","贵金属","SELECT name,type,weight_grams,buy_price_per_gram,current_price_per_gram,buy_date,buy_total,notes FROM precious_metals WHERE user_id=? ORDER BY id", ["名称","类型","克重","买入价/克","现价/克","买入日","买入总价","备注"], [16,10,10,12,12,12,14,20], lambda r: [r[0], dict(zip(["gold","silver","platinum","palladium"],["黄金","白银","铂金","钯金"])).get(r[1],r[1]), *r[2:]]),
+        ("precious_metal","贵金属","SELECT name,type,weight_grams,buy_price_per_gram,current_price_per_gram,buy_date,buy_total,notes FROM asset_precious_metal WHERE user_id=? ORDER BY id", ["名称","类型","克重","买入价/克","现价/克","买入日","买入总价","备注"], [16,10,10,12,12,12,14,20], lambda r: [r[0], dict(zip(["gold","silver","platinum","palladium"],["黄金","白银","铂金","钯金"])).get(r[1],r[1]), *r[2:]]),
         ("liability","负债",   "SELECT name,principal,rate,term_months,repay_type,start_date,monthly_payment,remaining,note FROM liabilities WHERE user_id=? ORDER BY id", ["名称","本金","年利率(%)","期限(月)","还款方式","起始日","月供","剩余本金","备注"], [16,14,12,10,12,12,12,14,20], lambda r: [r[i] for i in range(9)]),
     ]
 
@@ -117,7 +117,7 @@ def export_csv(
         ("fund",    "基金持仓", "SELECT code,name,shares,current_nav,note FROM asset_fund WHERE user_id=? ORDER BY id", lambda r: [f"{r[0]} {r[1]}", f"{r[2]} 份 × {r[3]} 净值", "CNY", r[4]]),
         ("stock",   "股票持仓", "SELECT code,name,shares,current_price,note FROM asset_stock WHERE user_id=? ORDER BY id", lambda r: [f"{r[0]} {r[1]}", f"{r[2]} 股 × {r[3]} 元", "CNY", r[4]]),
         ("bond",    "债权",     "SELECT name,issuer,face_value,rate,currency,note FROM asset_bond WHERE user_id=? ORDER BY id", lambda r: [f"{r[0]} ({r[1]})", f"{r[2]} (利率{r[3]}%)", r[4], r[5]]),
-        ("precious_metal","贵金属","SELECT name,type,weight_grams,current_price_per_gram,notes FROM precious_metals WHERE user_id=? ORDER BY id", lambda r: [f"{r[0]} ({dict(zip(['gold','silver','platinum','palladium'],['黄金','白银','铂金','钯金'])).get(r[1],r[1])})", f"{r[2]} 克 × {r[3]} 元/克", "CNY", r[4]]),
+        ("precious_metal","贵金属","SELECT name,type,weight_grams,current_price_per_gram,notes FROM asset_precious_metal WHERE user_id=? ORDER BY id", lambda r: [f"{r[0]} ({dict(zip(['gold','silver','platinum','palladium'],['黄金','白银','铂金','钯金'])).get(r[1],r[1])})", f"{r[2]} 克 × {r[3]} 元/克", "CNY", r[4]]),
         ("liability","负债",    "SELECT name,principal,rate,remaining,note FROM liabilities WHERE user_id=? ORDER BY id", lambda r: [r[0], f"{r[1]} (利率{r[2]}%, 剩余{r[3]})", "CNY", r[4]]),
     ]
 
@@ -151,7 +151,7 @@ def export_json(categories: Optional[str] = Query(None), user=Depends(get_curren
             "fund": "asset_fund",
             "stock": "asset_stock",
             "bond": "asset_bond",
-            "precious_metal": "precious_metals",
+            "precious_metal": "asset_precious_metal",
             "liabilities": "liabilities",
         }
         for key, table in tables.items():

@@ -6,14 +6,14 @@
     </div>
     <div class="page-card-body">
       <el-table :data="list" v-loading="loading" empty-text="暂无现金资产">
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="amount" label="金额" width="150">
+        <el-table-column prop="name" label="名称" min-width="90" show-overflow-tooltip />
+        <el-table-column prop="amount" label="金额" min-width="120">
           <template #default="{row}">{{ formatAmount(row.amount) }}</template>
         </el-table-column>
-        <el-table-column prop="account_name" label="账户" width="120" />
-        <el-table-column prop="currency" label="币种" width="80" />
-        <el-table-column prop="note" label="备注" min-width="150" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column prop="account_name" label="账户" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="currency" label="币种" width="65" />
+        <el-table-column prop="note" label="备注" min-width="100" show-overflow-tooltip />
+        <el-table-column label="操作" min-width="140" fixed="right">
           <template #default="{row}">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="del(row.id)">删除</el-button>
@@ -41,10 +41,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { listCash, createCash, updateCash, deleteCash, getAssetTrend } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatAmount } from '../composables/useAmountFormat'
+import { useTimeRangeStore } from '../stores/timeRange'
 import TrendChart from '../components/TrendChart.vue'
 
 const list = ref([])
@@ -53,6 +54,7 @@ const saving = ref(false)
 const dialog = ref(false)
 const editing = ref(null)
 const trendData = ref([])
+const timeStore = useTimeRangeStore()
 
 const form = reactive({ name: '', amount: 0, currency: 'CNY', account_name: '', note: '' })
 
@@ -85,8 +87,11 @@ async function del(id) {
 }
 
 async function loadTrend() {
-  try { const { data } = await getAssetTrend('cash', 30); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
+  try { const { data } = await getAssetTrend('cash', 30, timeStore.start, timeStore.end); trendData.value = (data || []).map(d => ({ snap_date: d.snap_date, net_worth: d.value || 0 })) } catch { trendData.value = [] }
 }
+
+// 时间范围变化时重新加载趋势
+watch(() => [timeStore.start, timeStore.end], () => { loadTrend() })
 
 onMounted(() => { load(); loadTrend() })
 </script>

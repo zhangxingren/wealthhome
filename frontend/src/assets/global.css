@@ -195,23 +195,22 @@ body {
   min-width: var(--sidebar-collapsed);
 }
 
-/* Logo area */
+/* Logo area — original position (sibling of nav), icon 1.2x scaled to match visual weight */
 .sidebar-logo {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-5) var(--space-4);
-  height: 64px;
+  /* 左边距 = sidebar-nav padding(8px) + nav-item padding(16px) = 与导航图标水平对齐 */
+  padding: var(--space-3) calc(var(--space-4) + var(--space-2));
+  min-height: 52px;
   user-select: none;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.sidebar-logo svg {
-  width: 24px; height: 24px;
+/* Logo icon uses .nav-icon wrapper (same as nav items) → inherits .nav-icon svg {width:20px;height:20px} */
+.sidebar-logo .nav-icon {
   color: var(--md-primary);
-  flex-shrink: 0;
-  transition: all var(--dur-medium2) var(--ease-emphasized);
-  margin-left: -4px;
 }
 
 .logo-text {
@@ -224,7 +223,15 @@ body {
   opacity: 1;
   transition: opacity var(--dur-medium1) var(--ease-standard);
 }
-.app-sidebar.collapsed .logo-text { opacity: 0; width: 0; }
+
+.app-sidebar.collapsed .logo-text { opacity: 0; width: 0; overflow: hidden; }
+/* 收起时：nav 有 padding-left 8px，所以 logo 也需要右偏对齐 */
+.app-sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+  padding: 0;
+  min-height: 44px;
+  margin-left: 17px;
+}
 
 .logo-accent {
   background: linear-gradient(135deg, var(--md-primary) 0%, #B388FF 100%);
@@ -680,6 +687,11 @@ body {
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   border: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  min-height: 96px;
 }
 
 .stat-card::after {
@@ -725,6 +737,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+/* 表格内数字等宽对齐 */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 .stat-card .sub {
   font-family: 'Roboto', sans-serif;
@@ -780,7 +798,9 @@ body {
   font-family: 'Roboto', 'PingFang SC', sans-serif;
   font-size: 14px;
   border-radius: 0 !important;
+  width: 100%;
 }
+.page-card-body .el-table .el-table__inner-wrapper { width: 100%; }
 .el-table::before { display: none; }
 .el-table td.el-table__cell,
 .el-table th.el-table__cell.is-leaf {
@@ -1374,6 +1394,43 @@ body {
 
 @media (max-width: 600px) {
   .mobile-save-btn { display: flex; }
+}
+
+/* ============ 盈亏汇总卡片（基金/股票/债券/贵金属共用） ============ */
+.pm-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--md-surface-container-low);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--md-outline-variant);
+}
+.pm-summary-item {
+  text-align: center;
+  padding: 8px;
+}
+.pm-summary-label {
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  margin-bottom: 4px;
+}
+.pm-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--c-text);
+}
+.pm-summary-item.profit .pm-summary-value {
+  color: #10b981;
+}
+.pm-summary-item.loss .pm-summary-value {
+  color: #ef4444;
+}
+.text-muted {
+  color: var(--c-text-tertiary);
+  font-size: 13px;
 }
 
 /* ============ Accessibility ============ */

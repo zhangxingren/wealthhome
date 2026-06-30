@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Node / Frontend source (only dist is needed)
+frontend/node_modules/
+frontend/src/
+frontend/public/
+frontend/*.json
+frontend/*.js
+frontend/*.mjs
+frontend/*.html
+frontend/*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & Data (will be in volume)
+*.log
+backend/*.db
+backend/app/*.db
+
+# Backup
+backup/
+*.tar.gz

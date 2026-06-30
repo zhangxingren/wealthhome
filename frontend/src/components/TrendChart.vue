@@ -39,7 +39,8 @@ const props = defineProps({
   color: { type: String, default: '#6750A4' },
   embedded: { type: Boolean, default: false },
   privacy: { type: Boolean, default: false },
-  tooltipPrefix: { type: String, default: '净值' }
+  tooltipPrefix: { type: String, default: '净值' },
+  brokenAxis: { type: Boolean, default: true }
 })
 
 const chartEl = ref(null)
@@ -58,10 +59,33 @@ function initChart() {
   const dates = props.data.map(d => d[props.dateKey]?.slice(5) || d.date || '')
   const values = props.data.map(d => d[props.valueKey] || 0)
   const isPrivate = props.privacy
+
+  // 断轴：Y 轴从数据最小值的 85% 处开始，减少大量空白
+  const yAxisConfig = {
+    type: 'value',
+    axisLabel: {
+      color: '#999',
+      fontSize: 11,
+      formatter: isPrivate
+        ? () => '***'
+        : (v => v >= 10000 ? (v / 10000).toFixed(1) + '万' : v),
+    },
+    splitLine: { lineStyle: { color: '#f0f0f0' } },
+  }
+  if (props.brokenAxis && !isPrivate) {
+    const validValues = values.filter(v => !isNaN(v) && v > 0)
+    if (validValues.length > 0) {
+      const minVal = Math.min(...validValues)
+      const magnitude = Math.pow(10, Math.floor(Math.log10(Math.abs(minVal))) - 1)
+      const axisMin = Math.floor(minVal / magnitude) * magnitude
+      yAxisConfig.min = axisMin > 0 ? axisMin : 0
+    }
+  }
+
   chart.setOption({
     grid: { top: 20, right: 20, bottom: 30, left: 60 },
     xAxis: { type: 'category', data: dates, axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#999', fontSize: 11 } },
-    yAxis: { type: 'value', axisLabel: { color: '#999', fontSize: 11, formatter: isPrivate ? () => '***' : (v => v >= 10000 ? (v / 10000).toFixed(1) + '万' : v) }, splitLine: { lineStyle: { color: '#f0f0f0' } } },
+    yAxis: yAxisConfig,
     series: [{
       type: 'line', data: values, smooth: true,
       symbol: isPrivate ? 'none' : 'circle', symbolSize: isPrivate ? 0 : 4,
@@ -87,13 +111,19 @@ watch(() => props.privacy, () => {
   nextTick(() => initChart())
 })
 
+let _resizeHandler = null
+
 onMounted(() => {
   nextTick(() => initChart())
-  window.addEventListener('resize', () => chart?.resize())
+  _resizeHandler = () => chart?.resize()
+  window.addEventListener('resize', _resizeHandler)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', () => chart?.resize())
+  if (_resizeHandler) {
+    window.removeEventListener('resize', _resizeHandler)
+    _resizeHandler = null
+  }
   if (chart) { chart.dispose(); chart = null }
 })
 </script>
